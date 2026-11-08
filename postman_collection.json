@@ -1,0 +1,203 @@
+{
+  "info": {
+    "name": "Crypto Payment Gateway API",
+    "description": "Коллекция запросов для тестирования сервиса имитации оплаты (Payment Gateway) с 4 этапами проверки кошелька.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000/api/v1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Системные (System)",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Платежи (Payments Pipeline)",
+      "item": [
+        {
+          "name": "1. Успешная оплата (Все 4 шага успешны)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_id\": \"shop_service_v1\",\n  \"order_id\": \"ORD-SUCCESS-101\",\n  \"client_id\": \"client_rich_01\",\n  \"amount\": 150.00,\n  \"currency\": \"USDT\",\n  \"description\": \"Оплата покупки смартфона\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/process",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "process"]
+            }
+          }
+        },
+        {
+          "name": "2. Отказ на шаге 1: Неизвестный клиент",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_id\": \"shop_service_v1\",\n  \"order_id\": \"ORD-UNKNOWN-404\",\n  \"client_id\": \"client_non_existent_99\",\n  \"amount\": 50.00,\n  \"currency\": \"USDT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/process",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "process"]
+            }
+          }
+        },
+        {
+          "name": "3. Отказ на шаге 1: Заблокированный клиент",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_id\": \"shop_service_v1\",\n  \"order_id\": \"ORD-BLOCKED-403\",\n  \"client_id\": \"client_blocked_03\",\n  \"amount\": 10.00,\n  \"currency\": \"USDT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/process",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "process"]
+            }
+          }
+        },
+        {
+          "name": "4. Отказ на шаге 3: Нехватка средств при повторном чеке баланса",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service_id\": \"shop_service_v1\",\n  \"order_id\": \"ORD-POOR-402\",\n  \"client_id\": \"client_poor_02\",\n  \"amount\": 999.00,\n  \"currency\": \"USDT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/process",
+              "host": ["{{base_url}}"],
+              "path": ["payments", "process"]
+            }
+          }
+        },
+        {
+          "name": "5. Список всех транзакций (Аудит)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/payments?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["payments"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Автономные проверки кошельков (Wallets)",
+      "item": [
+        {
+          "name": "Проверить клиента автономно (Шаг 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"client_rich_01\",\n  \"currency\": \"USDT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/wallets/verify-client",
+              "host": ["{{base_url}}"],
+              "path": ["wallets", "verify-client"]
+            }
+          }
+        },
+        {
+          "name": "Запрос данных кошелька и fee (Шаг 2)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/wallets/client_rich_01/data?currency=USDT",
+              "host": ["{{base_url}}"],
+              "path": ["wallets", "client_rich_01", "data"],
+              "query": [
+                {
+                  "key": "currency",
+                  "value": "USDT"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Запрос баланса кошелька (Шаг 3)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/wallets/client_rich_01/balance?amount=100.0&currency=USDT",
+              "host": ["{{base_url}}"],
+              "path": ["wallets", "client_rich_01", "balance"],
+              "query": [
+                {
+                  "key": "amount",
+                  "value": "100.0"
+                },
+                {
+                  "key": "currency",
+                  "value": "USDT"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+

@@ -14,9 +14,10 @@ sequenceDiagram
     actor ExternalService as Внешний сервис (Shop / Billing)
     participant Gateway as Payment Gateway Service
     participant Wallet as Crypto Wallet Provider (Mock / OpenSource Node)
+    participant DB as SQLite DB (Audit)
 
     ExternalService->>Gateway: POST /api/v1/payments/process (client_id, amount, currency, order_id)
-    Note over Gateway: Валидация запроса & идемпотентность
+    Note over Gateway: Валидация запроса & проверка идемпотентности
     
     rect rgb(240, 248, 255)
         Note over Gateway,Wallet: ШАГ 1: Проверка клиента в кошельке
@@ -25,7 +26,8 @@ sequenceDiagram
     end
 
     alt Клиент не найден или заблокирован
-        Gateway-->>ExternalService: Ответ: REJECTED (причина: клиент отклонен)
+        Gateway->>DB: Сохранение статуса REJECTED
+        Gateway-->>ExternalService: Ответ: REJECTED (причина: клиент отклонен кошельком)
     end
 
     rect rgb(245, 255, 250)
@@ -41,6 +43,7 @@ sequenceDiagram
     end
 
     alt Недостаточно средств
+        Gateway->>DB: Сохранение статуса REJECTED
         Gateway-->>ExternalService: Ответ: REJECTED (причина: недостаточно средств)
     end
 
@@ -50,6 +53,10 @@ sequenceDiagram
         Wallet-->>Gateway: Result: tx_hash
     end
 
+    Gateway->>DB: Персистентная запись в SQLite (payments.db)
+    opt Callback URL указан
+        Gateway--)ExternalService: Async Webhook (HMAC SHA-256 signed)
+    end
     Gateway-->>ExternalService: Возврат ответа: APPROVED + tx_hash + полный аудит шагов
 ```
 
@@ -107,7 +114,7 @@ class MyCustomCryptoWalletProvider(BaseWalletProvider):
 pip install -r requirements.txt
 
 # 2. Запуск сервера
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Вариант 2: Запуск в Docker / Docker Compose
@@ -116,7 +123,8 @@ python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 docker compose up -d --build
 ```
 
-Сервер будет доступен по адресу `http://localhost:8000`.
+Сервер будет доступен по адресу `http://localhost:8000`:
+- **Интерактивный Dashboard & Monitoring**: [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
 - **Интерактивная документация Swagger UI**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Альтернативная спецификация ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
 - **Health check**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
@@ -193,7 +201,7 @@ curl -X POST "http://localhost:8000/api/v1/payments/process" \
 | `client_rich_01` | 50,000 USDT, 2.1 BTC | Все 4 шага успешны (`APPROVED`) |
 | `client_poor_02` | 15 USDT | Ошибка на Шаге 3 — повторный чек баланса (`REJECTED`, недостаток средств) |
 | `client_blocked_03` | 100,000 USDT (Blocked) | Ошибка на Шаге 1 — проверка клиента (`REJECTED`, блокировка) |
-| `non_existent_client` | Не зарегистрирован | Ошибка на Шаге 1 — проверка клиента (`REJECTED`, клиент не найден) |
+| `ghost_user_999` | Не зарегистрирован | Ошибка на Шаге 1 — проверка клиента (`REJECTED`, клиент не найден) |
 
 ---
 
@@ -209,10 +217,31 @@ pytest -v
 
 В проекте есть скрипт [`scripts/simulate_external_client.py`](scripts/simulate_external_client.py), который отправляет реальные HTTP-запросы разных сценариев:
 ```bash
-# В терминале 1: запустите сервис
-python -m uvicorn app.main:app --port 8000
-
-# В терминале 2: запустите симулятор
 python scripts/simulate_external_client.py
 ```
+
+---
+
+## 📦 Импорт в Postman
+
+В корне репозитория находится файл [`postman_collection.json`](postman_collection.json), содержащий полный набор готовых запросов для всех сценариев и проверок.
+
+---
+
+## 📚 Архитектурная документация и спецификация
+
+Подробный документ с описанием функциональных и нефункциональных требований, 4 архитектурных диаграмм (Mermaid), описанием подхода Hexagonal Architecture и детальным разбором принципов SOLID доступен в файле:
+👉 **[`ARCHITECTURE_AND_SPECIFICATION.md`](ARCHITECTURE_AND_SPECIFICATION.md)**
+
+
+## 📦 Импорт в Postman
+
+В корне репозитория находится файл [`postman_collection.json`](postman_collection.json), содержащий полный набор готовых запросов для всех сценариев и проверок.
+
+---
+
+## 📚 Архитектурная документация и спецификация
+
+Подробный документ с описанием функциональных и нефункциональных требований, 4 архитектурных диаграмм (Mermaid), описанием подхода Hexagonal Architecture и детальным разбором принципов SOLID доступен в файле:
+👉 **[`ARCHITECTURE_AND_SPECIFICATION.md`](ARCHITECTURE_AND_SPECIFICATION.md)**
 
