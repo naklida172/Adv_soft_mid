@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  payment-gateway:
+    build: .
+    container_name: payment_gateway_service
+    ports:
+      - "8000:8000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - WALLET_PROVIDER_TYPE=mock
+      - MOCK_NETWORK_LATENCY_MS=30
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
