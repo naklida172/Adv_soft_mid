@@ -33,60 +33,40 @@
 
 ## 2. Архитектурные диаграммы (4 диаграммы)
 
-### Диаграмма 1: Архитектура системы (Hexagonal / Ports & Adapters Architecture)
+### Диаграмма 1: Диаграмма системного контекста (System Context Diagram / C4 Level 1)
 
-Показывает изоляцию доменной бизнес-логики от внешнего мира и адаптеров:
+Отображает границы разрабатываемого платежного шлюза, внешних акторов (вызывающие сервисы, операторы) и внешние системы (open source блокчейн-ноды, базы данных, вебхук-приемники):
 
 ```mermaid
-graph TD
-    subgraph Driving_Adapters ["Входные адаптеры (Primary / Driving Adapters)"]
-        ClientApp["Внешний сервис (E-commerce / Billing)"]
-        AdminWeb["Веб-интерфейс (/dashboard)"]
-        Swagger["OpenAPI / Swagger (/docs)"]
+graph LR
+    subgraph Users_And_Clients ["Внешние акторы и сервисы"]
+        ExternalService["<b>Внешние сервисы</b><br/>(Интернет-магазины, Биллинг, Боты)<br/><i>[Внешняя система]</i>"]
+        AdminUser["<b>Разработчик / Администратор</b><br/><i>[Пользователь]</i>"]
+        WebhookReceiver["<b>Webhook Приемник клиента</b><br/>(Callback URL endpoint)<br/><i>[Внешняя система]</i>"]
     end
 
-    subgraph API_Layer ["Слой API (Controllers / Routing)"]
-        PaymentsRouter["Payments API Controller"]
-        WalletsRouter["Wallets API Controller"]
-        HealthRouter["Health & System Controller"]
+    subgraph System_Boundary ["Контекст платежного шлюза"]
+        GatewaySystem["<b>Crypto Payment Gateway Service</b><br/><i>[Разрабатываемая система]</i><br/>• Прием и идемпотентность запросов<br/>• ШАГ 1: Верификация клиента в кошельке<br/>• ШАГ 2: Запрос метаданных и комиссии сети<br/>• ШАГ 3: Повторный чек баланса клиента<br/>• ШАГ 4: Исполнение и подписание транзакции<br/>• Формирование аудита и вебхуков"]
     end
 
-    subgraph Application_Core ["Ядро приложения (Application Core / Domain)"]
-        PaymentService["PaymentProcessingService\n(Оркестратор 4 шагов)"]
-        DomainModels["Доменные модели и схемы\n(Payment, Steps, Balances)"]
+    subgraph External_Systems ["Внешние блокчейн-узлы и инфраструктура"]
+        EVMNode["<b>Open Source EVM Nodes</b><br/>(Geth, Nethermind, Anvil, Polygon RPC)<br/><i>[Open Source Node]</i><br/>eth_getCode, eth_getBalance, etc."]
+        BTCNode["<b>Bitcoin Core / Electrum RPC</b><br/>(bitcoind, Electrum, BTCPay Server)<br/><i>[Open Source Wallet/Node]</i><br/>validateaddress, getreceivedbyaddress"]
+        MockNode["<b>Mock Wallet Sandbox</b><br/>(Эмулятор криптокошелька)<br/><i>[Встроенный тестовый провайдер]</i>"]
+        LocalDB[("<b>SQLite Database</b><br/>(payments.db)<br/><i>[Персистентное хранилище]</i><br/>История транзакций и шагов")]
     end
 
-    subgraph Ports ["Порты (Interfaces / SPI)"]
-        WalletPort["<< Interface >>\nBaseWalletProvider"]
-        RepoPort["<< Interface >>\nPaymentRepository"]
-    end
+    ExternalService -->|"1. Запрос на оплату<br/>POST /api/v1/payments/process"| GatewaySystem
+    GatewaySystem -->|"6. Ответ: APPROVED / REJECTED<br/>+ протокол всех 4 шагов"| ExternalService
 
-    subgraph Driven_Adapters ["Выходные адаптеры (Secondary / Driven Adapters)"]
-        MockAdapter["MockWalletProvider\n(Симулятор кошелька)"]
-        Web3Adapter["Web3EVMWalletProvider\n(Geth / Nethermind / Anvil)"]
-        BTCAdapter["BitcoinRPCWalletProvider\n(bitcoind / Electrum / BTCPay)"]
-        SQLiteRepo["SQLitePaymentRepository\n(payments.db)"]
-        WebhookSender["WebhookNotificationService\n(HMAC SHA-256)"]
-    end
+    AdminUser -->|"Мониторинг транзакций<br/>GET /dashboard, GET /docs"| GatewaySystem
 
-    ClientApp -->|HTTP POST| PaymentsRouter
-    AdminWeb -->|HTTP GET/POST| PaymentsRouter
-    Swagger -->|HTTP| API_Layer
+    GatewaySystem -->|"2-5. Запросы проверок и транзакций<br/>JSON-RPC 2.0 (HTTP)"| EVMNode
+    GatewaySystem -->|"2-5. Запросы проверок и транзакций<br/>Bitcoin JSON-RPC (HTTP)"| BTCNode
+    GatewaySystem -->|"2-5. Симуляция 4 шагов<br/>(Внутренний вызов)"| MockNode
 
-    PaymentsRouter --> PaymentService
-    WalletsRouter --> WalletPort
-    HealthRouter --> WalletPort
-
-    PaymentService --> DomainModels
-    PaymentService --> WalletPort
-    PaymentService --> RepoPort
-    PaymentService --> WebhookSender
-
-    WalletPort <|.. MockAdapter
-    WalletPort <|.. Web3Adapter
-    WalletPort <|.. BTCAdapter
-
-    RepoPort <|.. SQLiteRepo
+    GatewaySystem -->|"Сохранение и аудит заказов<br/>(SQL queries)"| LocalDB
+    GatewaySystem -.->|"Асинхронный Webhook с HMAC SHA-256<br/>POST callback_url"| WebhookReceiver
 ```
 
 ---
